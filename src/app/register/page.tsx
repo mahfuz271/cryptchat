@@ -137,7 +137,7 @@ export default function RegisterPage() {
                   id="password"
                   name="password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => setPassword(e.target.value?.trim())}
                   required
                   className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   placeholder="Create a password"

@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Send, Paperclip, Smile } from "lucide-react";
+import { Send } from "lucide-react";
 import { decryptMessage, encryptMessage } from "@/lib/crypto";
 import { User } from "next-auth";
 
@@ -234,12 +234,6 @@ export default function ChatBox({ recipientId }: ChatBoxProps) {
       {/* Message input */}
       <div className="border-t border-gray-200 p-4">
         <div className="flex items-center space-x-2">
-          <Button variant="ghost" size="icon" disabled={isLoading}>
-            <Paperclip className="h-5 w-5" />
-          </Button>
-          <Button variant="ghost" size="icon" disabled={isLoading}>
-            <Smile className="h-5 w-5" />
-          </Button>
           <Input
             className="flex-1"
             placeholder="Type a message..."

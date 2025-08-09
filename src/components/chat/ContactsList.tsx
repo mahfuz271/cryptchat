@@ -43,7 +43,7 @@ export default function ContactsList({
   }
 
   return (
-    <div className="divide-y divide-gray-200">
+    <div className="divide-y divide-gray-200 overflow-x-hidden">
       <div className="p-4 border-b border-gray-200">
         <h2 className="text-lg font-semibold">Contacts</h2>
       </div>
@@ -59,8 +59,8 @@ export default function ContactsList({
             </AvatarFallback>
           </Avatar>
           <div>
-            <h3 className="font-medium">{contact?.username}</h3>
-            <p className="text-sm text-gray-500 truncate max-w-xs">
+            <h3 className="font-medium text-ellipsis">{contact?.username}</h3>
+            <p className="text-sm text-gray-500 text-ellipsis">
               {contact.email}
             </p>
           </div>

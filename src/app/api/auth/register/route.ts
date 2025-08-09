@@ -9,7 +9,6 @@ export async function POST(request: Request) {
     const { username, email, password, publicKey, privateKey } =
       await request.json();
 
-    // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
       return NextResponse.json(
@@ -18,7 +17,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create new user
     const user = new User({
       username,
       email,
