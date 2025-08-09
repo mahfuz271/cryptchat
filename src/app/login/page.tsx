@@ -1,18 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { Eye, EyeOff, Loader, LogIn } from "lucide-react";
 import { decryptPrivateKey } from "@/lib/crypto";
 
 export default function LoginPage() {
+  const { status } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.push("/");
+    }
+  }, [status, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,19 +34,22 @@ export default function LoginPage() {
 
       const { encryptedPrivateKey } = await userResponse.json();
 
-      decryptPrivateKey(encryptedPrivateKey, password);
+      const privateKey = decryptPrivateKey(encryptedPrivateKey, password);
 
       const result = await signIn("credentials", {
         redirect: false,
         username,
         password,
+        callbackUrl: "/",
       });
 
       if (result?.error) {
         throw new Error(result.error);
-      } else {
-        router.push("/");
       }
+
+      localStorage.setItem("privateKey", privateKey);
+
+      router.push("/");
     } catch (error) {
       setError(error instanceof Error ? error.message : "Login failed");
     } finally {
@@ -140,7 +150,7 @@ export default function LoginPage() {
               Don&apos;t have an account?{" "}
               <button
                 onClick={() => router.push("/register")}
-                className="text-blue-600 hover:text-blue-500 font-medium"
+                className="text-blue-600 hover:text-blue-500 font-medium cursor-pointer"
               >
                 Create one
               </button>

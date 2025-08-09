@@ -30,34 +30,49 @@ CryptChat is a secure messaging application that implements true end-to-end encr
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant Client
-    participant Server
-    participant Database
+    participant User as User
+    participant Browser as Browser (Client)
+    participant Server as Server (API)
+    participant DB as MongoDB Database
 
-    User->>Client: 1. Enters password
-    Client->>Client: 2. Generates RSA key pair
-    Client->>Client: 3. Encrypts private key (AES-256) with password
-    Client->>Server: 4. Registers public key
-    Server->>Database: 5. Stores { publicKey, encryptedPrivateKey }
-    
-    Note over User,Database: Key Registration Phase
-    
-    User->>Client: 6. Composes message
-    Client->>Server: 7. Requests recipient's public key
-    Client->>Client: 8. Encrypts message (RSA-OAEP) with recipient's public key
-    Client->>Client: 9. Encrypts copy with own public key
-    Client->>Server: 10. Sends dual-encrypted message
-    Server->>Database: 11. Stores { contentForRecipient, contentForSender }
-    
-    Note over User,Database: Message Sending Phase
-    
-    Server->>Client: 12. Notifies recipient
-    Client->>Client: 13. Decrypts private key (AES-256) with password
-    Client->>Client: 14. Decrypts message with private key
-    Client->>User: 15. Displays plaintext
-    
-    Note over User,Database: Message Receiving Phase
+    %% --- Signup Phase ---
+    User->>Browser: 1. Enter username & password
+    Browser->>Browser: 2. Generate RSA-2048 key pair
+    Browser->>Browser: 3. Encrypt private key (AES-256) with password
+    Browser->>Server: 4. Send public key, encrypted private key, hashed password
+    Server->>DB: 5. Store { username, publicKey, encryptedPrivateKey, passwordHash }
+
+    Note over User,DB: Signup / Key Registration Phase
+
+    %% --- Login Phase ---
+    User->>Browser: 6. Enter username & password
+    Browser->>Server: 7. Request stored encrypted private key
+    Server->>DB: 8. Fetch encrypted private key
+    Server->>Browser: 9. Return encrypted private key
+    Browser->>Browser: 10. Decrypt private key (AES-256) with password
+
+    Note over User,DB: Login / Key Retrieval Phase
+
+    %% --- Sending a Message ---
+    User->>Browser: 11. Type message
+    Browser->>Server: 12. Request recipient's public key
+    Server->>DB: 13. Fetch recipient's public key
+    Server->>Browser: 14. Return recipient's public key
+    Browser->>Browser: 15. Encrypt message with recipient's public key
+    Browser->>Browser: 16. Encrypt copy with sender's public key (dual encryption)
+    Browser->>Server: 17. Send { contentForRecipient, contentForSender }
+    Server->>DB: 18. Store encrypted messages
+
+    Note over User,DB: Secure Message Sending Phase
+
+    %% --- Receiving a Message ---
+    Browser->>Server: 19. Poll for new messages (every 3s)
+    Server->>DB: 20. Retrieve encrypted messages
+    Server->>Browser: 21. Return encrypted messages
+    Browser->>Browser: 22. Decrypt using private key
+    Browser->>User: 23. Display plaintext message
+
+    Note over User,DB: Message Retrieval & Decryption Phase
 ```
 
 ## Tech Stack

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { decryptMessage, encryptMessage } from "@/lib/crypto";
 import { User } from "next-auth";
 
 interface Message {
-  id: string;
+  _id: string;
   recipient: string;
   sender: string;
   contentForRecipient: string;
@@ -31,6 +31,64 @@ export default function ChatBox({ recipientId }: ChatBoxProps) {
   const [recipient, setRecipient] = useState<User>();
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout>(null);
+
+  const privateKey = localStorage.getItem("privateKey");
+
+  const fetchMessages = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/messages?recipientId=${recipientId}`);
+      if (!response.ok) return;
+
+      const data = await response.json();
+
+      const processedMessages = await Promise.all(
+        data.map(async (msg: Message) => {
+          // For sender's own messages
+          if (msg.sender === session?.user?.id && privateKey) {
+            try {
+              const decrypted = await decryptMessage(
+                msg.contentForSender,
+                privateKey
+              );
+              return { ...msg, content: decrypted, isEncrypted: false };
+            } catch (error) {
+              console.error("Decryption failed:", error);
+              return { ...msg, content: "[Your message]" };
+            }
+          }
+
+          // For received messages
+          if (msg.recipient === session?.user?.id && privateKey) {
+            try {
+              const decrypted = await decryptMessage(
+                msg.contentForRecipient,
+                privateKey
+              );
+              return { ...msg, content: decrypted, isEncrypted: false };
+            } catch (error) {
+              console.error("Decryption failed:", error);
+              return { ...msg, content: "[Encrypted message]" };
+            }
+          }
+
+          return msg;
+        })
+      );
+
+      setMessages((prevMessages) => {
+        // Only update if messages have changed
+        if (
+          JSON.stringify(prevMessages) !== JSON.stringify(processedMessages)
+        ) {
+          return processedMessages;
+        }
+        return prevMessages;
+      });
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+    }
+  }, [recipientId, session?.user?.id, privateKey]);
 
   useEffect(() => {
     const fetchRecipient = async () => {
@@ -43,69 +101,31 @@ export default function ChatBox({ recipientId }: ChatBoxProps) {
       }
     };
 
-    const fetchMessages = async () => {
-      try {
-        const response = await fetch(
-          `/api/messages?recipientId=${recipientId}`
-        );
-        const data = await response.json();
-
-        const processedMessages = await Promise.all(
-          data.map(async (msg: Message) => {
-            // For sender's own messages
-            if (msg.sender === session?.user?.id && session?.user?.privateKey) {
-              try {
-                const decrypted = await decryptMessage(
-                  msg.contentForSender,
-                  session.user.privateKey
-                );
-                return { ...msg, content: decrypted, isEncrypted: false };
-              } catch (error) {
-                console.error("Decryption failed:", error);
-                return { ...msg, content: "[Your message]" };
-              }
-            }
-
-            // For received messages
-            if (
-              msg.recipient === session?.user?.id &&
-              session?.user?.privateKey
-            ) {
-              try {
-                const decrypted = await decryptMessage(
-                  msg.contentForRecipient,
-                  session.user.privateKey
-                );
-                return { ...msg, content: decrypted, isEncrypted: false };
-              } catch (error) {
-                console.error("Decryption failed:", error);
-                return { ...msg, content: "[Encrypted message]" };
-              }
-            }
-
-            return msg;
-          })
-        );
-
-        setMessages(processedMessages);
-      } catch (error) {
-        console.error("Error fetching messages:", error);
-      }
-    };
-
     if (recipientId) {
       fetchRecipient();
-      fetchMessages();
-    }
-  }, [recipientId, session?.user?.privateKey]);
+      fetchMessages(); // Initial fetch
 
-  // Auto-scroll to bottom when messages change
+      pollingIntervalRef.current = setInterval(fetchMessages, 3000);
+    }
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, [recipientId, fetchMessages]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !recipient?.publicKey) return;
+    if (
+      !newMessage.trim() ||
+      !recipient?.publicKey ||
+      !session?.user?.publicKey
+    )
+      return;
 
     try {
       setIsLoading(true);
@@ -116,14 +136,14 @@ export default function ChatBox({ recipientId }: ChatBoxProps) {
         recipient.publicKey
       );
 
-      // Encrypt for sender (using sender's own public key)
+      // Encrypt for sender
       const encryptedForSender = await encryptMessage(
         newMessage,
-        session?.user?.publicKey
+        session.user.publicKey
       );
 
       const messageData = {
-        sender: session?.user?.id || "",
+        sender: session.user.id,
         recipient: recipientId,
         contentForRecipient: encryptedForRecipient,
         contentForSender: encryptedForSender,
@@ -141,11 +161,11 @@ export default function ChatBox({ recipientId }: ChatBoxProps) {
       if (response.ok) {
         const sentMessage = await response.json();
 
-        setMessages([
-          ...messages,
+        setMessages((prev) => [
+          ...prev,
           {
             ...messageData,
-            id: sentMessage._id,
+            _id: sentMessage._id,
             content: newMessage,
             timestamp: new Date(sentMessage.timestamp),
             isEncrypted: false,
@@ -153,6 +173,7 @@ export default function ChatBox({ recipientId }: ChatBoxProps) {
         ]);
 
         setNewMessage("");
+        await fetchMessages();
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -188,47 +209,39 @@ export default function ChatBox({ recipientId }: ChatBoxProps) {
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {isLoading ? (
-          <div className="flex justify-center items-center h-full">
-            <p>Loading messages...</p>
-          </div>
-        ) : (
-          <>
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${
-                  message.sender === session?.user?.id
-                    ? "justify-end"
-                    : "justify-start"
+        {messages.map((message) => (
+          <div
+            key={message._id}
+            className={`flex ${
+              message.sender === session.user.id
+                ? "justify-end"
+                : "justify-start"
+            }`}
+          >
+            <div
+              className={`max-w-xs md:max-w-md lg:max-w-lg rounded-lg px-4 py-2 ${
+                message.sender === session.user.id
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-200 text-gray-800"
+              }`}
+            >
+              <p>{message.content}</p>
+              <p
+                className={`text-xs mt-1 ${
+                  message.sender === session.user.id
+                    ? "text-blue-100"
+                    : "text-gray-500"
                 }`}
               >
-                <div
-                  className={`max-w-xs md:max-w-md lg:max-w-lg rounded-lg px-4 py-2 ${
-                    message.sender === session?.user?.id
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-200 text-gray-800"
-                  }`}
-                >
-                  <p>{message.content}</p>
-                  <p
-                    className={`text-xs mt-1 ${
-                      message.sender === session?.user?.id
-                        ? "text-blue-100"
-                        : "text-gray-500"
-                    }`}
-                  >
-                    {new Date(message.timestamp).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
-                </div>
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </>
-        )}
+                {new Date(message.timestamp).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
+            </div>
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Message input */}

@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { generateKeyPair, encryptPrivateKey } from "@/lib/crypto";
 import { Eye, EyeOff, UserPlus } from "lucide-react";
 
 export default function RegisterPage() {
+  const { status } = useSession();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,6 +17,12 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.push("/");
+    }
+  }, [status, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -202,7 +210,7 @@ export default function RegisterPage() {
               Already have an account?{" "}
               <button
                 onClick={() => router.push("/login")}
-                className="text-blue-600 hover:text-blue-500 font-medium"
+                className="text-blue-600 hover:text-blue-500 font-medium cursor-pointer"
               >
                 Sign in
               </button>

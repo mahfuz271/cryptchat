@@ -6,7 +6,6 @@ declare module "next-auth" {
       id: string;
       username: string;
       publicKey: string;
-      privateKey: string;
     } & DefaultSession["user"];
   }
 
@@ -14,7 +13,6 @@ declare module "next-auth" {
     id: string;
     username: string;
     publicKey: string;
-    privateKey: string;
   }
 }
 
@@ -23,6 +21,5 @@ declare module "next-auth/jwt" {
     id: string;
     username: string;
     publicKey: string;
-    privateKey: string;
   }
 }
